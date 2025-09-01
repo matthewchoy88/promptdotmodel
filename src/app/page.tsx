@@ -174,20 +174,9 @@ export default function Home() {
     <div className="min-h-screen bg-zinc-950">
       <div className="max-w-full p-4 space-y-4">
         {/* Compact Header */}
-        <div className="flex items-center justify-between py-2">
-          <div className="text-sm font-mono text-zinc-300">
-            model comparison tool
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="text-xs font-mono text-zinc-500">
-              {selectedModels.length} models selected
-            </div>
-            <ModelSelector
-              availableModels={availableModels}
-              selectedModels={selectedModels}
-              onModelToggle={handleModelToggle}
-              disabled={isRunning}
-            />
+        <div className="flex items-center justify-end py-2">
+          <div className="text-xs font-mono text-zinc-500">
+            {selectedModels.length} models selected
           </div>
         </div>
 
@@ -205,6 +194,10 @@ export default function Home() {
         <ComparisonTable
           prompt={prompt}
           modelResults={modelResults}
+          availableModels={availableModels}
+          selectedModels={selectedModels}
+          onModelToggle={handleModelToggle}
+          disabled={isRunning}
         />
       </div>
     </div>

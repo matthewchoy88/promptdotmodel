@@ -2,7 +2,8 @@
 
 import * as React from "react"
 import { ModelMetadata, CompletionResponse } from "@/lib/providers"
-import { Clock, DollarSign, Hash } from "lucide-react"
+import { ModelSelector } from "@/components/model-selector"
+import { Clock, DollarSign, Hash, Plus } from "lucide-react"
 
 interface ModelResult {
   model: ModelMetadata
@@ -14,9 +15,20 @@ interface ModelResult {
 interface ComparisonTableProps {
   prompt: string
   modelResults: ModelResult[]
+  availableModels: ModelMetadata[]
+  selectedModels: ModelMetadata[]
+  onModelToggle: (model: ModelMetadata) => void
+  disabled: boolean
 }
 
-export function ComparisonTable({ prompt, modelResults }: ComparisonTableProps) {
+export function ComparisonTable({ 
+  prompt, 
+  modelResults, 
+  availableModels, 
+  selectedModels, 
+  onModelToggle, 
+  disabled 
+}: ComparisonTableProps) {
   if (modelResults.length === 0) {
     return (
       <div className="border border-zinc-800 bg-zinc-950">
@@ -42,7 +54,7 @@ export function ComparisonTable({ prompt, modelResults }: ComparisonTableProps) 
               {modelResults.map((result) => (
                 <th
                   key={result.model.id}
-                  className="min-w-80 text-left px-4 py-3 text-xs font-mono font-semibold text-zinc-300 uppercase tracking-wide border-r border-zinc-800 last:border-r-0"
+                  className="min-w-80 text-left px-4 py-3 text-xs font-mono font-semibold text-zinc-300 uppercase tracking-wide border-r border-zinc-800"
                 >
                   <div className="space-y-1">
                     <div className="text-zinc-100 font-semibold">
@@ -54,6 +66,14 @@ export function ComparisonTable({ prompt, modelResults }: ComparisonTableProps) 
                   </div>
                 </th>
               ))}
+              <th className="w-48 text-center px-4 py-3 text-xs font-mono font-semibold text-zinc-300 uppercase tracking-wide">
+                <ModelSelector
+                  availableModels={availableModels}
+                  selectedModels={selectedModels}
+                  onModelToggle={onModelToggle}
+                  disabled={disabled}
+                />
+              </th>
             </tr>
           </thead>
         </table>
@@ -71,13 +91,14 @@ export function ComparisonTable({ prompt, modelResults }: ComparisonTableProps) 
               {modelResults.map((result) => (
                 <td
                   key={result.model.id}
-                  className="min-w-80 px-4 py-4 border-r border-zinc-800 last:border-r-0 align-top"
+                  className="min-w-80 px-4 py-4 border-r border-zinc-800 align-top"
                 >
                   <div className="text-xs font-mono text-zinc-500 mb-2 break-words">
                     {prompt.length > 100 ? `${prompt.slice(0, 100)}...` : prompt}
                   </div>
                 </td>
               ))}
+              <td className="w-48 px-4 py-4 align-top"></td>
             </tr>
 
             {/* Response Row */}
@@ -88,7 +109,7 @@ export function ComparisonTable({ prompt, modelResults }: ComparisonTableProps) 
               {modelResults.map((result) => (
                 <td
                   key={result.model.id}
-                  className="min-w-80 px-4 py-4 border-r border-zinc-800 last:border-r-0 align-top"
+                  className="min-w-80 px-4 py-4 border-r border-zinc-800 align-top"
                 >
                   {result.isLoading && (
                     <div className="flex items-center gap-2 text-zinc-400 font-mono text-sm">
@@ -118,6 +139,7 @@ export function ComparisonTable({ prompt, modelResults }: ComparisonTableProps) 
                   )}
                 </td>
               ))}
+              <td className="w-48 px-4 py-4 align-top"></td>
             </tr>
 
             {/* Metrics Row */}
@@ -128,7 +150,7 @@ export function ComparisonTable({ prompt, modelResults }: ComparisonTableProps) 
               {modelResults.map((result) => (
                 <td
                   key={result.model.id}
-                  className="min-w-80 px-4 py-4 border-r border-zinc-800 last:border-r-0 align-top"
+                  className="min-w-80 px-4 py-4 border-r border-zinc-800 align-top"
                 >
                   {result.response && (
                     <div className="space-y-2">
@@ -157,6 +179,7 @@ export function ComparisonTable({ prompt, modelResults }: ComparisonTableProps) 
                   )}
                 </td>
               ))}
+              <td className="w-48 px-4 py-4 align-top"></td>
             </tr>
           </tbody>
         </table>
