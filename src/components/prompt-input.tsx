@@ -3,6 +3,8 @@
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Label } from "@/components/ui/label"
 import { Play, Square, RotateCcw } from "lucide-react"
 
 interface PromptInputProps {
@@ -12,6 +14,9 @@ interface PromptInputProps {
   onClear: () => void
   isRunning: boolean
   disabled?: boolean
+  autoRunEvals?: boolean
+  onAutoRunEvalsChange?: (checked: boolean) => void
+  hasEvals?: boolean
 }
 
 export function PromptInput({
@@ -20,7 +25,10 @@ export function PromptInput({
   onRun,
   onClear,
   isRunning,
-  disabled = false
+  disabled = false,
+  autoRunEvals = false,
+  onAutoRunEvalsChange,
+  hasEvals = false
 }: PromptInputProps) {
   const maxLength = 4000
   const characterCount = prompt.length
@@ -47,6 +55,23 @@ export function PromptInput({
           </div>
         </div>
         <div className="flex flex-col gap-2">
+          {hasEvals && onAutoRunEvalsChange && (
+            <div className="flex items-center gap-2 px-1">
+              <Checkbox 
+                id="auto-run-evals"
+                checked={autoRunEvals}
+                onCheckedChange={onAutoRunEvalsChange}
+                className="h-3.5 w-3.5 border-zinc-600 data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600"
+                disabled={disabled || isRunning}
+              />
+              <Label 
+                htmlFor="auto-run-evals" 
+                className="text-xs font-mono text-zinc-400 cursor-pointer select-none"
+              >
+                auto-run evals
+              </Label>
+            </div>
+          )}
           <Button
             onClick={onRun}
             disabled={!prompt.trim() || isOverLimit || disabled || isRunning}
