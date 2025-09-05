@@ -41,6 +41,8 @@ export interface ProviderConfig {
   timeout?: number;
   /** Additional headers to send with requests */
   headers?: Record<string, string>;
+  /** Whether to use OpenRouter as a proxy for this provider */
+  useOpenRouter?: boolean;
 }
 
 export interface CompletionParams {
@@ -94,7 +96,7 @@ export class ProviderError extends Error {
   }
 }
 
-export type ProviderName = 'anthropic' | 'openai';
+export type ProviderName = 'anthropic' | 'openai' | 'openrouter';
 
 export interface ProviderInfo {
   /** Name of the provider */

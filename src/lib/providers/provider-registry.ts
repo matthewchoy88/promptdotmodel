@@ -1,6 +1,7 @@
 import { AIProvider } from './base-provider';
 import { AnthropicProvider } from './anthropic-provider';
 import { OpenAIProvider } from './openai-provider';
+import { OpenRouterProvider } from './openrouter-provider';
 import {
   ProviderConfig,
   ProviderName,
@@ -21,6 +22,7 @@ export class ProviderRegistry {
     // Initialize with default providers
     this.registerProvider('anthropic', new AnthropicProvider());
     this.registerProvider('openai', new OpenAIProvider());
+    this.registerProvider('openrouter', new OpenRouterProvider());
   }
 
   /**
@@ -236,6 +238,7 @@ export class ProviderRegistry {
     this.providers.clear();
     this.registerProvider('anthropic', new AnthropicProvider());
     this.registerProvider('openai', new OpenAIProvider());
+    this.registerProvider('openrouter', new OpenRouterProvider());
   }
 }
 

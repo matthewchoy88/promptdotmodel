@@ -76,7 +76,7 @@ export class OpenAIProvider extends BaseAIProvider {
   }
 
   async complete(modelId: string, params: CompletionParams): Promise<CompletionResponse> {
-    if (!this.isConfigured()) {
+    if (!this.isConfigured() && !process.env.OPENAI_API_KEY && !process.env.OPENROUTER_API_KEY) {
       throw this.createError('OpenAI provider is not configured. Please provide an API key.');
     }
 
@@ -86,20 +86,46 @@ export class OpenAIProvider extends BaseAIProvider {
     }
 
     try {
-      // For now, return a dummy response
-      // In a real implementation, this would make an API call to OpenAI's API
-      const response = this.generateDummyResponse(modelId, params);
-      
-      // Add OpenAI-specific metadata
-      response.metadata = {
-        ...response.metadata,
-        openaiVersion: '2024-02-01',
-        modelVersion: model.id,
-        systemMessage: params.systemMessage,
-        finishReason: 'stop',
-      };
+      // Make actual API call through our route handler
+      const response = await fetch('/api/complete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          provider: 'openai',
+          modelId,
+          prompt: params.prompt,
+          systemMessage: params.systemMessage,
+          temperature: params.temperature,
+          maxTokens: params.maxTokens,
+          topP: params.topP,
+          apiKey: this.config.apiKey,
+          useOpenRouter: this.config.useOpenRouter
+        }),
+      });
 
-      return response;
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.details || error.error || 'API request failed');
+      }
+
+      const data = await response.json();
+      
+      // Calculate cost based on model pricing
+      const cost = this.estimateCost(modelId, data.inputTokens, data.outputTokens);
+      
+      return {
+        ...data,
+        cost,
+        metadata: {
+          ...data.metadata,
+          openaiVersion: '2024-02-01',
+          modelVersion: model.id,
+          systemMessage: params.systemMessage,
+          finishReason: 'stop',
+        }
+      };
     } catch (error) {
       if (error instanceof Error) {
         throw this.createError(

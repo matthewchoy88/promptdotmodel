@@ -5,7 +5,8 @@ import { PromptInput } from "@/components/prompt-input"
 import { ModelSelector } from "@/components/model-selector"
 import { ComparisonTable } from "@/components/comparison-table"
 import { providerRegistry, ModelMetadata, CompletionResponse } from "@/lib/providers"
-import { Plus } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
+import { Plus, Zap } from "lucide-react"
 
 interface ModelResult {
   model: ModelMetadata
@@ -19,6 +20,7 @@ export default function Home() {
   const [selectedModels, setSelectedModels] = React.useState<ModelMetadata[]>([])
   const [modelResults, setModelResults] = React.useState<ModelResult[]>([])
   const [isRunning, setIsRunning] = React.useState(false)
+  const [useRealAPI, setUseRealAPI] = React.useState(false)
   
   // Get available models from the provider registry
   const availableModels = React.useMemo(() => {
@@ -104,27 +106,54 @@ export default function Home() {
     // Run completions for each model
     const completionPromises = selectedModels.map(async (model) => {
       try {
-        // For now, we'll generate dummy responses since the providers might not be configured
-        // In a real implementation, you would call:
-        // const response = await providerRegistry.findModel(model.id)?.provider.complete(model.id, { prompt })
+        let response: CompletionResponse
         
-        // Simulate API call delay
-        await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000))
-        
-        // Generate a dummy response
-        const dummyResponse: CompletionResponse = {
-          content: `This is a sample response from ${model.name}. In a real implementation, this would be the actual response from the AI model. The response would be generated based on your prompt: "${prompt.slice(0, 100)}${prompt.length > 100 ? '...' : ''}"`,
-          model: model.id,
-          inputTokens: Math.floor(prompt.length / 4), // Rough estimate
-          outputTokens: Math.floor(Math.random() * 200) + 50,
-          duration: Math.floor(Math.random() * 3000) + 500,
-          cost: Math.random() * 0.001,
-          metadata: {}
+        if (useRealAPI) {
+          // Call real API
+          const provider = model.provider === 'openrouter' ? 'openrouter' : 
+                          model.id.includes('openrouter') ? 'openrouter' :
+                          model.id.includes('gpt') ? 'openai' : 
+                          model.id.includes('claude') ? 'anthropic' : model.provider
+          
+          const apiResponse = await fetch('/api/complete', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              provider,
+              modelId: model.id,
+              prompt,
+              temperature: 0.7,
+              maxTokens: 4096,
+              useOpenRouter: provider === 'openrouter' || model.id.includes('/')
+            }),
+          })
+          
+          if (!apiResponse.ok) {
+            const error = await apiResponse.json()
+            throw new Error(error.details || error.error || 'API request failed')
+          }
+          
+          response = await apiResponse.json()
+        } else {
+          // Generate dummy response
+          await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000))
+          
+          response = {
+            content: `This is a sample response from ${model.name}. In a real implementation, this would be the actual response from the AI model. The response would be generated based on your prompt: "${prompt.slice(0, 100)}${prompt.length > 100 ? '...' : ''}"`,
+            model: model.id,
+            inputTokens: Math.floor(prompt.length / 4),
+            outputTokens: Math.floor(Math.random() * 200) + 50,
+            duration: Math.floor(Math.random() * 3000) + 500,
+            cost: Math.random() * 0.001,
+            metadata: {}
+          }
         }
         
         return {
           modelId: model.id,
-          response: dummyResponse,
+          response,
           error: null
         }
       } catch (error) {
@@ -174,7 +203,20 @@ export default function Home() {
     <div className="min-h-screen bg-zinc-950">
       <div className="max-w-full p-4 space-y-4">
         {/* Compact Header */}
-        <div className="flex items-center justify-end py-2">
+        <div className="flex items-center justify-between py-2">
+          <div className="flex items-center gap-3">
+            <Switch
+              checked={useRealAPI}
+              onCheckedChange={setUseRealAPI}
+              className="data-[state=checked]:bg-green-500"
+            />
+            <div className="flex items-center gap-2">
+              <Zap className={`w-4 h-4 ${useRealAPI ? 'text-green-500' : 'text-zinc-500'}`} />
+              <span className={`text-xs font-mono ${useRealAPI ? 'text-green-500' : 'text-zinc-500'}`}>
+                {useRealAPI ? 'Real API' : 'Sample Mode'}
+              </span>
+            </div>
+          </div>
           <div className="text-xs font-mono text-zinc-500">
             {selectedModels.length} models selected
           </div>

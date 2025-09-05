@@ -44,6 +44,7 @@ export { BaseAIProvider } from './base-provider';
 // Specific provider implementations
 export { AnthropicProvider } from './anthropic-provider';
 export { OpenAIProvider } from './openai-provider';
+export { OpenRouterProvider } from './openrouter-provider';
 
 // Provider registry
 export { ProviderRegistry, providerRegistry } from './provider-registry';
@@ -60,6 +61,7 @@ import { ModelMetadata } from './types';
 export async function setupProviders(config: {
   anthropicApiKey?: string;
   openaiApiKey?: string;
+  openRouterApiKey?: string;
 }) {
   const configurations: Record<string, any> = {};
   
@@ -69,6 +71,17 @@ export async function setupProviders(config: {
   
   if (config.openaiApiKey) {
     configurations.openai = { apiKey: config.openaiApiKey };
+  }
+  
+  if (config.openRouterApiKey) {
+    configurations.openrouter = { apiKey: config.openRouterApiKey };
+    // Also configure other providers to use OpenRouter if they don't have their own keys
+    if (!config.openaiApiKey) {
+      configurations.openai = { apiKey: config.openRouterApiKey, useOpenRouter: true };
+    }
+    if (!config.anthropicApiKey) {
+      configurations.anthropic = { apiKey: config.openRouterApiKey, useOpenRouter: true };
+    }
   }
   
   await providerRegistry.configureProviders(configurations);
@@ -124,15 +137,26 @@ export function validateEnvironment(): {
   const missingKeys: string[] = [];
   const warnings: string[] = [];
   
-  if (!process.env.OPENAI_API_KEY) {
+  // Check if at least one API key is set
+  const hasOpenAI = !!process.env.OPENAI_API_KEY;
+  const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
+  const hasOpenRouter = !!process.env.OPENROUTER_API_KEY;
+  
+  if (!hasOpenAI && !hasOpenRouter) {
     missingKeys.push('OPENAI_API_KEY');
   }
   
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!hasAnthropic && !hasOpenRouter) {
     missingKeys.push('ANTHROPIC_API_KEY');
   }
   
-  if (missingKeys.length > 0) {
+  if (!hasOpenRouter && missingKeys.length > 0) {
+    warnings.push(
+      'Consider setting OPENROUTER_API_KEY to access all models with a single API key.'
+    );
+  }
+  
+  if (missingKeys.length > 0 && !hasOpenRouter) {
     warnings.push(
       `Missing API keys: ${missingKeys.join(', ')}. ` +
       'These providers will not be available until configured.'
@@ -140,7 +164,7 @@ export function validateEnvironment(): {
   }
   
   return {
-    isValid: missingKeys.length === 0,
+    isValid: hasOpenRouter || (hasOpenAI && hasAnthropic),
     missingKeys,
     warnings,
   };
