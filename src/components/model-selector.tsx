@@ -315,12 +315,15 @@ export function ModelSelector({
                       }`}
                       onClick={() => handleModelToggle(model)}
                     >
-                      <td className={`px-4 py-4 border-r border-zinc-800 bg-zinc-950 z-10 ${
-                        tableMode === 'scroll' ? 'sticky left-0' : ''
-                      }`}>
+                      <td 
+                        className={`px-4 py-4 border-r border-zinc-800 bg-zinc-950 z-10 ${
+                          tableMode === 'scroll' ? 'sticky left-0' : ''
+                        }`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <Checkbox
                           checked={isSelected}
-                          onChange={() => {}}
+                          onCheckedChange={() => handleModelToggle(model)}
                         />
                       </td>
                       <td className={`px-4 py-4 text-sm font-mono text-zinc-300 border-r border-zinc-800 bg-zinc-950 z-10 capitalize ${

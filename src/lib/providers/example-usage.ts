@@ -144,6 +144,7 @@ export async function exampleBatchOperations() {
   await providerRegistry.configureProviders({
     openai: { apiKey: 'openai-key' },
     anthropic: { apiKey: 'anthropic-key' },
+    openrouter: { apiKey: 'openrouter-key' },
   });
 
   // Validate all connections

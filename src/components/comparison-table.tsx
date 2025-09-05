@@ -3,7 +3,9 @@
 import * as React from "react"
 import { ModelMetadata, CompletionResponse } from "@/lib/providers"
 import { ModelSelector } from "@/components/model-selector"
-import { Clock, DollarSign, Hash } from "lucide-react"
+import { AddEvalDialog, EvalConfig } from "@/components/add-eval-dialog"
+import { Clock, DollarSign, Hash, Plus, Loader2, Settings } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 interface ResizableGridProps {
   children: React.ReactNode
@@ -136,6 +138,14 @@ interface ModelResult {
   isLoading: boolean
 }
 
+interface EvalResult {
+  evalId: string
+  modelId: string
+  result: string | null
+  isLoading: boolean
+  error: string | null
+}
+
 interface ComparisonTableProps {
   prompt: string
   modelResults: ModelResult[]
@@ -143,6 +153,11 @@ interface ComparisonTableProps {
   selectedModels: ModelMetadata[]
   onModelToggle: (model: ModelMetadata) => void
   disabled: boolean
+  evals?: EvalConfig[]
+  evalResults?: EvalResult[]
+  onAddEval?: (config: EvalConfig) => void
+  onRunEvals?: (evalConfig: EvalConfig) => void
+  onEditEval?: (config: EvalConfig) => void
 }
 
 export function ComparisonTable({ 
@@ -151,8 +166,15 @@ export function ComparisonTable({
   availableModels, 
   selectedModels, 
   onModelToggle, 
-  disabled 
+  disabled,
+  evals = [],
+  evalResults = [],
+  onAddEval,
+  onRunEvals,
+  onEditEval
 }: ComparisonTableProps) {
+  const [showAddEvalDialog, setShowAddEvalDialog] = React.useState(false)
+  const [editingEval, setEditingEval] = React.useState<EvalConfig | null>(null)
   // State for column and row sizes
   const [columnWidths, setColumnWidths] = React.useState<string[]>(() => {
     const baseWidth = '320px' // Fixed starting width for model columns
@@ -161,7 +183,19 @@ export function ComparisonTable({
     return [testCaseWidth, ...modelResults.map(() => baseWidth), addModelWidth]
   })
   
-  const [rowHeights, setRowHeights] = React.useState<string[]>(['80px', '80px', '200px', '100px']) // Header, prompt, response, metrics
+  // Calculate row heights dynamically based on evals
+  const [rowHeights, setRowHeights] = React.useState<string[]>(() => {
+    const baseRows = ['80px', '80px', '200px', '100px'] // Header, prompt, response, metrics
+    const evalRows = evals.map(() => '100px')
+    return [...baseRows, ...evalRows, '60px'] // Plus 'Add Eval' row
+  })
+  
+  // Update row heights when evals change
+  React.useEffect(() => {
+    const baseRows = ['80px', '80px', '200px', '100px']
+    const evalRows = evals.map(() => '100px')
+    setRowHeights([...baseRows, ...evalRows, '60px'])
+  }, [evals])
   
   // Update column widths when models change
   React.useEffect(() => {
@@ -181,10 +215,21 @@ export function ComparisonTable({
   
   if (modelResults.length === 0) {
     return (
-      <div className="border border-zinc-800 bg-zinc-950">
+      <div className="border border-zinc-800 bg-zinc-950 overflow-hidden">
+        <div className="border-b border-zinc-800 bg-zinc-900 px-4 py-3">
+          <div className="flex items-center justify-center">
+            <ModelSelector
+              availableModels={availableModels}
+              selectedModels={selectedModels}
+              onModelToggle={onModelToggle}
+              disabled={disabled}
+              compact={true}
+            />
+          </div>
+        </div>
         <div className="p-8 text-center">
           <p className="text-zinc-400 font-mono text-sm">
-            No models selected. Add models to begin comparison.
+            Select models above to begin comparison
           </p>
         </div>
       </div>
@@ -333,7 +378,123 @@ export function ComparisonTable({
         <div className="px-4 py-4 border-2 border-dashed border-zinc-600 hover:bg-zinc-900/50 flex items-center justify-center text-zinc-500 text-sm">
           no_metrics
         </div>
+        
+        {/* Evaluation Rows */}
+        {evals.map((evalConfig, evalIndex) => (
+          <React.Fragment key={evalConfig.name}>
+            <div className="px-4 py-4 text-sm font-mono text-zinc-300 border-r border-zinc-800 border-b border-zinc-800 hover:bg-zinc-900/50">
+              <div className="flex items-center justify-between">
+                <span>{evalConfig.name}</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setEditingEval(evalConfig)}
+                  className="h-6 w-6 p-0 text-zinc-500 hover:text-zinc-200 hover:bg-zinc-700"
+                  title="Edit evaluation"
+                >
+                  <Settings className="w-3 h-3" />
+                </Button>
+              </div>
+            </div>
+            
+            {modelResults.map((result) => {
+              const evalResult = evalResults.find(
+                r => r.evalId === evalConfig.name && r.modelId === result.model.id
+              )
+              
+              return (
+                <div
+                  key={`eval-${evalConfig.name}-${result.model.id}`}
+                  className="px-4 py-4 border-r border-zinc-800 border-b border-zinc-800 hover:bg-zinc-900/50 overflow-auto"
+                >
+                  {evalResult?.isLoading && (
+                    <div className="flex items-center gap-2 text-zinc-400 font-mono text-sm">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      evaluating...
+                    </div>
+                  )}
+                  
+                  {evalResult?.error && (
+                    <div className="text-red-400 font-mono text-sm break-words">
+                      ERROR: {evalResult.error}
+                    </div>
+                  )}
+                  
+                  {evalResult?.result && !evalResult.isLoading && (
+                    <div className="text-sm text-zinc-200 font-mono leading-relaxed break-words whitespace-pre-wrap">
+                      {evalResult.result}
+                    </div>
+                  )}
+                  
+                  {!evalResult && result.response && (
+                    <Button
+                      size="sm"
+                      onClick={() => onRunEvals && onRunEvals(evalConfig)}
+                      className="bg-zinc-800 text-zinc-300 hover:bg-zinc-700 text-xs"
+                      disabled={disabled}
+                    >
+                      Run Eval
+                    </Button>
+                  )}
+                  
+                  {!evalResult && !result.response && (
+                    <div className="text-zinc-500 font-mono text-sm">
+                      awaiting_response
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+            
+            <div className="px-4 py-4 border-b border-zinc-800 border-2 border-dashed border-zinc-600 hover:bg-zinc-900/50"></div>
+          </React.Fragment>
+        ))}
+        
+        {/* Add Evaluation Row */}
+        <div className="px-4 py-3 text-sm font-mono text-zinc-400 border-r border-zinc-800 flex items-center hover:bg-zinc-900/50">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setShowAddEvalDialog(true)}
+            className="text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 w-full justify-start"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Add Evaluation
+          </Button>
+        </div>
+        
+        {modelResults.map(() => (
+          <div
+            key={Math.random()}
+            className="px-4 py-3 border-r border-zinc-800 hover:bg-zinc-900/50"
+          ></div>
+        ))}
+        
+        <div className="px-4 py-3 border-2 border-dashed border-zinc-600 hover:bg-zinc-900/50"></div>
       </ResizableGrid>
+      
+      {onAddEval && (
+        <AddEvalDialog
+          open={showAddEvalDialog || !!editingEval}
+          onOpenChange={(open) => {
+            if (!open) {
+              setShowAddEvalDialog(false)
+              setEditingEval(null)
+            }
+          }}
+          onAddEval={(config) => {
+            if (editingEval && onEditEval) {
+              onEditEval(config)
+            } else {
+              onAddEval(config)
+            }
+            setEditingEval(null)
+            setShowAddEvalDialog(false)
+          }}
+          availableModels={availableModels}
+          initialConfig={editingEval}
+        />
+      )}
     </div>
   )
 }

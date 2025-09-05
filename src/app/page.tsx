@@ -4,6 +4,7 @@ import * as React from "react"
 import { PromptInput } from "@/components/prompt-input"
 import { ModelSelector } from "@/components/model-selector"
 import { ComparisonTable } from "@/components/comparison-table"
+import { EvalConfig, LLMJudgeConfig } from "@/components/add-eval-dialog"
 import { providerRegistry, ModelMetadata, CompletionResponse } from "@/lib/providers"
 import { Switch } from "@/components/ui/switch"
 import { Plus, Zap } from "lucide-react"
@@ -15,12 +16,23 @@ interface ModelResult {
   isLoading: boolean
 }
 
+interface EvalResult {
+  evalId: string
+  modelId: string
+  result: string | null
+  isLoading: boolean
+  error: string | null
+}
+
 export default function Home() {
   const [prompt, setPrompt] = React.useState("")
   const [selectedModels, setSelectedModels] = React.useState<ModelMetadata[]>([])
   const [modelResults, setModelResults] = React.useState<ModelResult[]>([])
   const [isRunning, setIsRunning] = React.useState(false)
   const [useRealAPI, setUseRealAPI] = React.useState(false)
+  const [evals, setEvals] = React.useState<EvalConfig[]>([])
+  const [evalResults, setEvalResults] = React.useState<EvalResult[]>([])
+  const [autoRunEvals, setAutoRunEvals] = React.useState(false)
   
   // Get available models from the provider registry
   const availableModels = React.useMemo(() => {
@@ -184,6 +196,16 @@ export default function Home() {
       })
     )
     
+    // Auto-run evaluations if enabled
+    if (autoRunEvals && evals.length > 0) {
+      // Wait for state to update with the new model results
+      setTimeout(async () => {
+        for (const evalConfig of evals) {
+          await handleRunEval(evalConfig)
+        }
+      }, 100)
+    }
+    
     setIsRunning(false)
   }
   
@@ -197,6 +219,126 @@ export default function Home() {
         isLoading: false
       }))
     )
+    setEvalResults([])
+  }
+  
+  const handleAddEval = (config: EvalConfig) => {
+    setEvals(prev => [...prev, config])
+  }
+  
+  const handleEditEval = (config: EvalConfig) => {
+    setEvals(prev => prev.map(e => 
+      e.name === config.name ? config : e
+    ))
+    // Clear any cached results for this eval since config changed
+    setEvalResults(prev => prev.filter(r => r.evalId !== config.name))
+  }
+  
+  const handleRunEval = async (evalConfig: EvalConfig) => {
+    if (evalConfig.type !== 'llm-judge') return
+    
+    const judgeConfig = evalConfig as LLMJudgeConfig
+    if (!judgeConfig.model) return
+    
+    // Set loading state for all models for this eval
+    setEvalResults(prev => [
+      ...prev.filter(r => r.evalId !== evalConfig.name),
+      ...modelResults.map(result => ({
+        evalId: evalConfig.name,
+        modelId: result.model.id,
+        result: null,
+        isLoading: result.response !== null,
+        error: null
+      }))
+    ])
+    
+    // Run eval for each model that has a response
+    const evalPromises = modelResults
+      .filter(result => result.response !== null)
+      .map(async (modelResult) => {
+        try {
+          // Prepare the judge prompt with placeholders replaced (replace all occurrences)
+          const judgePrompt = judgeConfig.prompt
+            .replace(/\{input\}/g, prompt)
+            .replace(/\{output\}/g, modelResult.response?.content || '')
+          
+          let response: CompletionResponse
+          
+          if (useRealAPI && judgeConfig.model) {
+            const provider = judgeConfig.model.provider === 'openrouter' ? 'openrouter' : 
+                            judgeConfig.model.id.includes('openrouter') ? 'openrouter' :
+                            judgeConfig.model.id.includes('gpt') ? 'openai' : 
+                            judgeConfig.model.id.includes('claude') ? 'anthropic' : judgeConfig.model.provider
+            
+            const apiResponse = await fetch('/api/complete', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                provider,
+                modelId: judgeConfig.model.id,
+                prompt: judgePrompt,
+                temperature: 0.3,
+                maxTokens: 500,
+                useOpenRouter: provider === 'openrouter' || judgeConfig.model.id.includes('/')
+              }),
+            })
+            
+            if (!apiResponse.ok) {
+              const error = await apiResponse.json()
+              throw new Error(error.details || error.error || 'API request failed')
+            }
+            
+            response = await apiResponse.json()
+          } else {
+            // Generate dummy eval response
+            await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000))
+            
+            const scores = [7, 8, 9, 6, 8.5, 7.5]
+            const score = scores[Math.floor(Math.random() * scores.length)]
+            const evaluations = [
+              `Score: ${score}/10\n\nThe response demonstrates good understanding of the prompt with clear and relevant content.`,
+              `Score: ${score}/10\n\nWell-structured response that addresses the key points effectively.`,
+              `Score: ${score}/10\n\nThe output shows competent handling of the task with minor areas for improvement.`,
+            ]
+            
+            response = {
+              content: evaluations[Math.floor(Math.random() * evaluations.length)],
+              model: judgeConfig.model?.id || 'unknown',
+              inputTokens: Math.floor(judgePrompt.length / 4),
+              outputTokens: 50,
+              duration: Math.floor(Math.random() * 1000) + 200,
+              cost: Math.random() * 0.0001,
+              metadata: {}
+            }
+          }
+          
+          return {
+            evalId: evalConfig.name,
+            modelId: modelResult.model.id,
+            result: response.content,
+            isLoading: false,
+            error: null
+          }
+        } catch (error) {
+          return {
+            evalId: evalConfig.name,
+            modelId: modelResult.model.id,
+            result: null,
+            isLoading: false,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          }
+        }
+      })
+    
+    const results = await Promise.all(evalPromises)
+    
+    // Update eval results
+    setEvalResults(prev => [
+      ...prev.filter(r => r.evalId !== evalConfig.name),
+      ...results
+    ])
   }
   
   return (
@@ -230,6 +372,9 @@ export default function Home() {
           onClear={handleClear}
           isRunning={isRunning}
           disabled={selectedModels.length === 0}
+          autoRunEvals={autoRunEvals}
+          onAutoRunEvalsChange={setAutoRunEvals}
+          hasEvals={evals.length > 0}
         />
 
         {/* Comparison Table */}
@@ -240,6 +385,11 @@ export default function Home() {
           selectedModels={selectedModels}
           onModelToggle={handleModelToggle}
           disabled={isRunning}
+          evals={evals}
+          evalResults={evalResults}
+          onAddEval={handleAddEval}
+          onRunEvals={handleRunEval}
+          onEditEval={handleEditEval}
         />
       </div>
     </div>
